@@ -12,7 +12,8 @@ WHITELIST_IPS = [
     '34.212.75.30',
     '54.218.53.128',
     '52.32.178.7', 
-    '127.0.0.1'
+    '127.0.0.1', 
+    '10.8.0.75',
 ]
 
 def ip_whitelist(f):
@@ -28,19 +29,12 @@ def home():
     app.logger.info('Endpoint / diakses.')
     return jsonify({"message": "Welcome Home"}), 200
 
-@app.route('/ping', methods=['POST'])
-def ping():
-    data = request.get_json()
-    if data:
-        return jsonify({"message": "Data received", "data": data}), 200
-    else:
-        return jsonify({"message": "No data received"}), 400
-
 @app.route('/webhook', methods=['POST'])
+@ip_whitelist
 def webhook():
     data = request.get_json()
 
-    if not mt5.initialize(login=79279974, server="Exness-MT5Trial8", password="Nurhud@123"):
+    if not mt5.initialize(path=r"C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe", login=79279974, server="Exness-MT5Trial8", password="Nurhud@123"):
         return jsonify({'message': f'initialize() failed, error code ={mt5.last_error()}'}), 500
 
     action = data.get('action')
@@ -64,7 +58,7 @@ def webhook():
         return jsonify({'message': f'Unsupported action: {action}'}), 400
     
     deviation = 20
-    lot = 0.01
+    lot = 0.05
 
     if entry_type == "open":
         
@@ -78,7 +72,7 @@ def webhook():
             "type_time": mt5.ORDER_TIME_GTC,
         })
 
-        app.logger.info(f"Open Order {result.order}")
+        app.logger.info(f"{entry_type} Order {result.order}, with IP {request.remote_addr}" )
 
         mt5.shutdown()
 
@@ -131,7 +125,7 @@ def webhook():
 
         result = mt5.order_send(close_request)
 
-        app.logger.info(f"Close Order {result.order}")
+        app.logger.info(f"{entry_type} Order {result.order}, with IP {request.remote_addr}" )
 
         mt5.shutdown()
 

@@ -3,7 +3,7 @@ import MetaTrader5 as mt5
 import time
 import utils
 
-if not mt5.initialize(login=79279974, server="Exness-MT5Trial8", password="Nurhud@123"):
+if not mt5.initialize(path=r"C:\Users\sysad\AppData\Roaming\MetaTrader 5 EXNESS\terminal64.exe", login=79279974, server="Exness-MT5Trial8", password="Nurhud@123"):
     print("initialize() failed, error code =",mt5.last_error())
     quit()
 
@@ -25,7 +25,5 @@ result = mt5.order_send({
     "comment": "test",
     "type_time": mt5.ORDER_TIME_GTC,
 })
-
-utils.add_new_line(result.order)
 
 mt5.shutdown()
