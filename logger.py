@@ -19,9 +19,6 @@ class ColorFormatter(logging.Formatter):
 
 # Set up the logger
 def setup():
-    log = logging.getLogger('werkzeug')
-    log.disabled = True
-
     logger = logging.getLogger()
     logger.setLevel(logging.DEBUG)
 
