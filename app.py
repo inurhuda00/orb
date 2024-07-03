@@ -1,11 +1,11 @@
 from flask import Flask, request, jsonify
-import logging
+import logger
 import MetaTrader5 as mt5
 import utils
 
-
 app = Flask(__name__)
-logging.basicConfig(level=logging.INFO)
+
+logger = logger.setup()
 
 WHITELIST_IPS = [
     '52.89.214.238',
@@ -19,6 +19,7 @@ WHITELIST_IPS = [
 def ip_whitelist(f):
     def decorator(*args, **kwargs):
         if request.remote_addr not in WHITELIST_IPS:
+            logger.critical(f"Access denied, your IP is: {request.remote_addr}")
             return jsonify({"message": f"Access denied, your IP is: {request.remote_addr}"}), 403
         return f(*args, **kwargs)
     decorator.__name__ = f.__name__
@@ -26,7 +27,7 @@ def ip_whitelist(f):
 
 @app.route('/', methods=['GET'])
 def home():
-    app.logger.info('Endpoint / diakses.')
+    logger.debug('Endpoint / diakses.')
     return jsonify({"message": "Welcome Home"}), 200
 
 @app.route('/webhook', methods=['POST'])
@@ -35,6 +36,7 @@ def webhook():
     data = request.get_json()
 
     if not mt5.initialize(path=r"C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe", login=79279974, server="Exness-MT5Trial8", password="Nurhud@123"):
+        logger.error(f'initialize() failed, error code ={mt5.last_error()}')
         return jsonify({'message': f'initialize() failed, error code ={mt5.last_error()}'}), 500
 
     action = data.get('action')
@@ -43,6 +45,7 @@ def webhook():
 
     symbol_info = mt5.symbol_info(ticker)
     if symbol_info is None:
+        logger.error(f'Symbol {ticker} not found')
         return jsonify({'message': f'Symbol {ticker} not found'}), 404
 
     if 'Close entry' in comment:
@@ -55,6 +58,7 @@ def webhook():
     elif action == 'sell':
         order_type = mt5.ORDER_TYPE_SELL
     else:
+        logger.error(f'Unsupported action: {action}')
         return jsonify({'message': f'Unsupported action: {action}'}), 400
     
     deviation = 20
@@ -72,7 +76,7 @@ def webhook():
             "type_time": mt5.ORDER_TIME_GTC,
         })
 
-        app.logger.info(f"{entry_type} Order {result.order}, with IP {request.remote_addr}" )
+        logger.debug(f"{ticker} {entry_type} Order {result.order}, with IP {request.remote_addr}" )
 
         mt5.shutdown()
 
@@ -84,9 +88,11 @@ def webhook():
                 exchange=data.get('exchange'), 
                 ticket=result.order
             )
-            
-            return jsonify({'message': 'Order processed successfully', 'order': result.order})
+
+            logger.info(f'Order success {result.order}')
+            return jsonify({'message': 'Order success', 'order': result.order})
         else:
+            logger.error(f'Failed to process order, error {result.retcode}')
             return jsonify({'message': 'Failed to process order', 'error_code': result.retcode}), 500
     
     elif entry_type == 'close_entry':
@@ -98,6 +104,7 @@ def webhook():
         )
 
         if not orders:
+            logger.error("Order not found")
             return jsonify({'message': 'Order not found.', 'error_code': 'ORDERS_NOT_FOUND'}), 404
 
         first_order = orders[0]
@@ -106,7 +113,7 @@ def webhook():
         position = mt5.positions_get(ticket=int(ticket))
 
         if position is None or len(position) == 0:
-            print("No position found with ticket", ticket)
+            logger.error(f"No position found with ticket {ticket}")
             utils.delete_by_ticket(ticket=ticket)
             return jsonify({'message': 'No position found', 'error_code': 'POSITION_NOT_FOUND'}), 404
         
@@ -125,20 +132,22 @@ def webhook():
 
         result = mt5.order_send(close_request)
 
-        app.logger.info(f"{entry_type} Order {result.order}, with IP {request.remote_addr}" )
+        logger.info(f"{ticker} {entry_type} Order {result.order}, with IP {request.remote_addr}" )
 
         mt5.shutdown()
 
         if result.retcode == mt5.TRADE_RETCODE_DONE:
             utils.delete_by_ticket(ticket=ticket)
-            return jsonify({'message': 'Close Order processed successfully', 'order': result.order})
+            logger.info(f'Order success {result.order}')
+            return jsonify({'message': 'Close Order success', 'order': result.order})
         else:
+            logger.error(f'Failed to process order, error {result.retcode}')
             return jsonify({'message': 'Failed to process order', 'error_code': result.retcode}), 500
-    
+        
+    logger.critical("Invalid request")
     return jsonify({'message': 'Invalid request', 'error_code': 'INVALID_REQUEST'}), 400
     
 
-    
 @app.route('/dashboard', methods=['POST'])
 def dashboard():
     data = request.get_json()
