@@ -2,6 +2,8 @@ from flask import Flask, request, jsonify
 import logger
 import MetaTrader5 as mt5
 import utils
+import pandas as pd
+import size
 
 app = Flask(__name__)
 
@@ -55,14 +57,27 @@ def webhook():
 
     if action == 'buy':
         order_type = mt5.ORDER_TYPE_BUY
+        atr = 'atr_buy'
     elif action == 'sell':
         order_type = mt5.ORDER_TYPE_SELL
+        atr = 'atr_sell'
     else:
         logger.error(f'Unsupported action: {action}')
         return jsonify({'message': f'Unsupported action: {action}'}), 400
     
     deviation = 20
-    lot = 0.05
+    risk_percentage = 0.05 # 5%
+    # lot = 0.05
+
+    # LOT SIZING
+    balance = mt5.account_info()._asdict()['balance']
+    money_risk = size.calculate_money_risk(balance, risk_percentage)
+    digit = mt5.symbol_info(ticker).digits
+    
+    rates = pd.DataFrame(mt5.copy_rates_from_pos(ticker, mt5.TIMEFRAME_M15, 1, 4))
+    stop_loss = size.get_stop_loss(rates)
+    lot = size.calulate_lot(rates['close'].values[-1], stop_loss[atr], money_risk, digit)
+
 
     if entry_type == "open":
         
